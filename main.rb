@@ -1,9 +1,17 @@
 #!/usr/bin/ruby
 
+# ruby extensions that we use
+# more details at: http://guides.rubygems.org/what-is-a-gem/
+# and http://wiki.ruby-portal.de/RubyGems
 require 'uri'
 require 'net/http'
 require 'bunny'
+require 'base64'
+require 'httparty'
+require 'json'
 
+# connection settings for our rabbitmq
+# replace guest/guest with the credentials that marcel and tim have
 connection_details = {
   :host      => "ci-slave1.virtapi.org",
   :port      => 5672,
@@ -14,27 +22,61 @@ connection_details = {
   :auth_mechanism => "PLAIN"
 }
 
-# http://rubybunny.info/articles/exchanges.html
-conn = Bunny.new(connection_details)
-conn.start # establish connection to rabbitmq
-ch = conn.create_channel
-x = ch.fanout("marcelliitest")
-q = ch.queue("", :auto_delete => true).bind(x)
-q.subscribe do |delivery_info, properties, payload|
-  puts "[consumer] #{q.name} received a message: #{payload}"
+# login data for twitter API
+# https://developer.twitter.com/en/docs/basics/authentication/overview/application-only.html
+twitter_consumer_key = ''
+twitter_consumer_secret = ''
+twitter_api_url_we_want_to_query = 'https://api.twitter.com/1.1/search/tweets.json?q=%23BigData_Corp_Int'
+
+def rabbitmq_queue(connection_details)
+  # connect to our rabbitmq, create a channel (something we throw messages in)
+  # and afterwards subscribe to it
+  # http://rubybunny.info/articles/exchanges.html
+  conn = Bunny.new(connection_details)
+  conn.start # establish connection to rabbitmq
+  ch = conn.create_channel
+  x = ch.fanout("marcelliitest")
+  q = ch.queue("", :auto_delete => true).bind(x)
+  q
 end
-x.publish('this is a test')
 
-#url = URI("https://api.twitter.com/1.1/search/tweets.json?q=%23BigData_Corp_Int")
-#
-#http = Net::HTTP.new(url.host, url.port)
-#http.use_ssl = true
-#http.verify_mode = OpenSSL::SSL::VERIFY_NONE
-#
-#request = Net::HTTP::Get.new(url)
-#request["authorization"] = 'OAuth oauth_consumer_key=\"0g7NQj0ughknNxnzSqrlMteu0\",oauth_token=\"916030610216509440-NQe6ZfinZXLRvgCOPu5cWvs4x7ej6JA\",oauth_signature_method=\"HMAC-SHA1\",oauth_timestamp=\"1508353633\",oauth_nonce=\"AkfJu3\",oauth_version=\"1.0\",oauth_signature=\"d99lswktSowcjKJJw4bHhpVm3g4%3D\"'
-#request["cache-control"] = 'no-cache'
+def twitter_bearer_token(consumer_key, consumer_secret)
+  credentials = Base64.encode64("#{consumer_key}:#{consumer_secret}").gsub("\n", '')
+  url = "https://api.twitter.com/oauth2/token"
+  body = "grant_type=client_credentials"
+  headers = {
+    "Authorization" => "Basic #{credentials}",
+    "Content-Type" => "application/x-www-form-urlencoded;charset=UTF-8"
+  }
+  r = HTTParty.post(url, body: body, headers: headers)
+  bearer_token = JSON.parse(r.body)['access_token']
+  bearer_token
+end
 
+def twitter_api_call(bearer_token, url)
+  api_auth_header = {"Authorization" => "Bearer #{bearer_token}"}
+  HTTParty.get(url, headers: api_auth_header).body
+end
+################################################################
+# Let the magic happen
+# establish connection to rabbitmq
+queue = rabbitmq_queue(connection_details)
 
-#response = http.request(request)
-#variable = response.read_body
+# connect us as consumer to rabbitmq
+# this allows us to retrieve incoming messages
+queue.subscribe do |delivery_info, properties, payload|
+  puts "[consumer] #{queue.name} received a message: #{payload}"
+end
+
+# connect to twitter and get the bearer token
+bearer_token = twitter_bearer_token(twitter_consumer_key, twitter_consumer_secret)
+
+# this is a test message that we will send to the rabbitmq
+#queue.publish('this is a test')
+
+# http://i0.kym-cdn.com/entries/icons/original/000/007/582/tumblr_lmputme3co1qa6q7k_large.png
+# get data from twitter, then throw it into rabbitmq
+result = twitter_api_call(bearer_token, twitter_api_url_we_want_to_query)
+# print result on STDOUT
+puts result
+queue.publish(result)
