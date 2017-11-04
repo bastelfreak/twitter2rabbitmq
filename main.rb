@@ -28,7 +28,7 @@ twitter_consumer_key = ''
 twitter_consumer_secret = ''
 twitter_api_url_we_want_to_query = 'https://api.twitter.com/1.1/search/tweets.json?q=%23BigData_Corp_Int'
 
-def rabbitmq_queue(connection_details)
+def rabbitmq_channel(connection_details)
   # connect to our rabbitmq, create a channel (something we throw messages in)
   # and afterwards subscribe to it
   # http://rubybunny.info/articles/exchanges.html
@@ -36,8 +36,9 @@ def rabbitmq_queue(connection_details)
   conn.start # establish connection to rabbitmq
   ch = conn.create_channel
   x = ch.fanout("marcelliitest")
-  q = ch.queue("", :auto_delete => true).bind(x)
-  q
+  x
+  #q = ch.queue("", :auto_delete => true).bind(x)
+  #q
 end
 
 def twitter_bearer_token(consumer_key, consumer_secret)
@@ -60,10 +61,11 @@ end
 ################################################################
 # Let the magic happen
 # establish connection to rabbitmq
-queue = rabbitmq_queue(connection_details)
+channel = rabbitmq_channel(connection_details)
 
 # connect us as consumer to rabbitmq
 # this allows us to retrieve incoming messages
+queue = channel.queue("", :auto_delete => true).bind('marcelliitest')
 queue.subscribe do |delivery_info, properties, payload|
   puts "[consumer] #{queue.name} received a message: #{payload}"
 end
@@ -79,4 +81,4 @@ bearer_token = twitter_bearer_token(twitter_consumer_key, twitter_consumer_secre
 result = twitter_api_call(bearer_token, twitter_api_url_we_want_to_query)
 # print result on STDOUT
 puts result
-queue.publish(result)
+channel.publish(result)
