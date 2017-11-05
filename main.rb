@@ -1,4 +1,5 @@
 #!/usr/bin/ruby
+# frozen_string_literal: true
 
 # ruby extensions that we use
 # more details at: http://guides.rubygems.org/what-is-a-gem/
@@ -13,13 +14,13 @@ require 'json'
 # connection settings for our rabbitmq
 # replace guest/guest with the credentials that marcel and tim have
 connection_details = {
-  :host      => "ci-slave1.virtapi.org",
-  :port      => 5672,
-  :ssl       => false,
-  :vhost     => "/",
-  :user      => "guest",
-  :pass      => "guest",
-  :auth_mechanism => "PLAIN"
+  host: 'ci-slave1.virtapi.org',
+  port: 5672,
+  ssl: false,
+  vhost: '/',
+  user: 'guest',
+  pass: 'guest',
+  auth_mechanism: 'PLAIN'
 }
 
 # login data for twitter API
@@ -35,19 +36,19 @@ def rabbitmq_channel(connection_details)
   conn = Bunny.new(connection_details)
   conn.start # establish connection to rabbitmq
   ch = conn.create_channel
-  x = ch.fanout("marcelliitest")
+  x = ch.fanout('marcelliitest')
   x
-  #q = ch.queue("", :auto_delete => true).bind(x)
-  #q
+  # q = ch.queue("", :auto_delete => true).bind(x)
+  # q
 end
 
 def twitter_bearer_token(consumer_key, consumer_secret)
-  credentials = Base64.encode64("#{consumer_key}:#{consumer_secret}").gsub("\n", '')
-  url = "https://api.twitter.com/oauth2/token"
-  body = "grant_type=client_credentials"
+  credentials = Base64.encode64("#{consumer_key}:#{consumer_secret}").delete("\n")
+  url = 'https://api.twitter.com/oauth2/token'
+  body = 'grant_type=client_credentials'
   headers = {
-    "Authorization" => "Basic #{credentials}",
-    "Content-Type" => "application/x-www-form-urlencoded;charset=UTF-8"
+    'Authorization' => "Basic #{credentials}",
+    'Content-Type' => 'application/x-www-form-urlencoded;charset=UTF-8'
   }
   r = HTTParty.post(url, body: body, headers: headers)
   bearer_token = JSON.parse(r.body)['access_token']
@@ -55,7 +56,7 @@ def twitter_bearer_token(consumer_key, consumer_secret)
 end
 
 def twitter_api_call(bearer_token, url)
-  api_auth_header = {"Authorization" => "Bearer #{bearer_token}"}
+  api_auth_header = { 'Authorization' => "Bearer #{bearer_token}" }
   HTTParty.get(url, headers: api_auth_header).body
 end
 ################################################################
@@ -65,8 +66,8 @@ channel = rabbitmq_channel(connection_details)
 
 # connect us as consumer to rabbitmq
 # this allows us to retrieve incoming messages
-queue = channel.queue("", :auto_delete => true).bind('marcelliitest')
-queue.subscribe do |delivery_info, properties, payload|
+queue = channel.queue('', auto_delete: true).bind('marcelliitest')
+queue.subscribe do |_delivery_info, _properties, payload|
   puts "[consumer] #{queue.name} received a message: #{payload}"
 end
 
@@ -74,7 +75,7 @@ end
 bearer_token = twitter_bearer_token(twitter_consumer_key, twitter_consumer_secret)
 
 # this is a test message that we will send to the rabbitmq
-#queue.publish('this is a test')
+# queue.publish('this is a test')
 
 # http://i0.kym-cdn.com/entries/icons/original/000/007/582/tumblr_lmputme3co1qa6q7k_large.png
 # get data from twitter, then throw it into rabbitmq
