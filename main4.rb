@@ -28,7 +28,6 @@ connection_details = {
 twitter_consumer_key = ''
 twitter_consumer_secret = ''
 
-
 def rabbitmq_channel(connection_details)
   # connect to our rabbitmq, create a channel (something we throw messages in)
   # and afterwards subscribe to it
@@ -38,8 +37,6 @@ def rabbitmq_channel(connection_details)
   ch = conn.create_channel
   x = ch.fanout('marcelliitest')
   x
-  # q = ch.queue("", :auto_delete => true).bind(x)
-  # q
 end
 
 def twitter_bearer_token(consumer_key, consumer_secret)
@@ -60,32 +57,34 @@ def twitter_api_call(bearer_token, url)
   HTTParty.get(url, headers: api_auth_header).body
 end
 
-################################################################
-# Suchbegriffe als array ..
-searchpatterns = ['bchh17', 'jamaikasondierung', 'cop23', 'ouryjalloh', 'familiennachzug', 
-'gerfra','digitalisierung', 'viagra', 'hotbabes', 'millionaire']
+searchpatterns = %w[bchh17 jamaikasondierung cop23 ouryjalloh familiennachzug gerfra digitalisierung viagra hotbabes millionaire]
 
-# Iteration / Schleife - Anfang
 
-def twitter_api_call_with_hastag_parameter(hashtag, channel, count)
+def get_all_tweets_from_hashtag(hashtag, channel, count, bearer_token)
   twitter_api_url_we_want_to_query = "https://api.twitter.com/1.1/search/tweets.json?q=##{hashtag}&count=#{count}"
-  bearer_token = twitter_bearer_token(twitter_consumer_key, twitter_consumer_secret)
   # http://i0.kym-cdn.com/entries/icons/original/000/007/582/tumblr_lmputme3co1qa6q7k_large.png
   # get data from twitter, then throw it into rabbitmq
   result = twitter_api_call(bearer_token, twitter_api_url_we_want_to_query)
   json = JSON.load(result)
   statuses = json['statuses']
   statuses.each do |status|
-  # change in JSON from Array 
+    # change in JSON from Array
     channel.publish(status.to_json)
   end
   sleep(240)
 end
 
-# establish connection to rabbitmq
-channel = rabbitmq_channel(connection_details)
-  
-count = 450 / searchpattern.count
-searchpatterns.each do |searchpattern|
-  twitter_api_call_with_hastag_parameter(local,channel,count)
+def get_all_tweets_from_hashtags(searchpatterns)
+  bearer_token = twitter_bearer_token(twitter_consumer_key, twitter_consumer_secret)
+  # establish connection to rabbitmq
+  channel = rabbitmq_channel(connection_details)
+  count = 450 / searchpatterns.count
+  searchpatterns.each do |searchpattern|
+    get_all_tweets_from_hashtag(searchpattern, channel, count, bearer_token)
+  end
+end
+
+loop do
+  get_all_tweets_from_hashtags(searchpatterns)
+  sleep 60 * 15
 end
